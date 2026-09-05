@@ -1,0 +1,86 @@
+{
+  "_note": "PLACEHOLDER DEVELOPMENT CASES. NOT THE FINAL CONQUER BENCHMARK. The final benchmark will be designed after the literature review and evaluation methodology are finalized.",
+  "cases": [
+    {
+      "id": "conquer-001-process-vs-thread",
+      "topic": "Data Structures & Algorithms",
+      "question": "Explain the difference between a process and a thread. How do they share memory and context switch?",
+      "candidate_answer": "A process is an executing program instance with its own private virtual memory space, file descriptors, and heap. A thread is the smallest unit of CPU scheduling within a process; threads in the same process share code, data, and heap, but each has its own stack and registers. Context switching between processes is more expensive because it requires flushing TLBs and switching page tables, whereas thread switching within the same process retains the virtual memory mapping.",
+      "mode": "STANDARD",
+      "metadata": {
+        "expected_quality": "High",
+        "key_concepts": [
+          "virtual memory",
+          "TLB flush",
+          "private stack",
+          "shared heap"
+        ]
+      }
+    },
+    {
+      "id": "conquer-002-db-indexing",
+      "topic": "System Design",
+      "question": "How does a B-tree database index speed up queries, and what are the trade-offs on write operations?",
+      "candidate_answer": "B-tree indexes organize keys in balanced multi-way tree nodes kept in sorted order on disk, allowing point lookups and range queries to run in O(log N) disk page reads. The trade-off is write overhead: every INSERT, UPDATE, or DELETE on an indexed column requires traversing and updating the index, potentially triggering page splits, WAL writes, and lock contention.",
+      "mode": "STANDARD",
+      "metadata": {
+        "expected_quality": "High",
+        "key_concepts": [
+          "B-tree",
+          "range scan",
+          "write overhead",
+          "page split"
+        ]
+      }
+    },
+    {
+      "id": "conquer-003-tcp-vs-udp",
+      "topic": "System Design",
+      "question": "When would you choose UDP over TCP for a real-time multiplayer game or streaming application?",
+      "candidate_answer": "I would choose UDP when low latency and fresh data matter more than guaranteed delivery. TCP provides reliable ordered delivery via sequence numbers and retransmissions, which causes head-of-line blocking if a packet drops. In real-time gaming, a delayed player position is useless; dropping old packets and processing the latest snapshot via UDP minimizes lag.",
+      "mode": "STANDARD",
+      "metadata": {
+        "expected_quality": "High",
+        "key_concepts": [
+          "head-of-line blocking",
+          "retransmissions",
+          "latency",
+          "packet drop tolerance"
+        ]
+      }
+    },
+    {
+      "id": "conquer-004-cache-invalidation",
+      "topic": "System Design",
+      "question": "Explain Cache-Aside vs Write-Through caching patterns and how to mitigate cache stampede (thundering herd).",
+      "candidate_answer": "In Cache-Aside, the application reads from cache; on miss, it loads from the database and writes back to cache. In Write-Through, writes go to cache and database synchronously. To prevent cache stampedes when a popular key expires, we can use probabilistic early expiration (XFetch), distributed mutex locks (Redis Redlock), or serve stale data while a background worker refreshes asynchronously.",
+      "mode": "STANDARD",
+      "metadata": {
+        "expected_quality": "High",
+        "key_concepts": [
+          "cache-aside",
+          "write-through",
+          "thundering herd",
+          "mutex lock",
+          "probabilistic expiration"
+        ]
+      }
+    },
+    {
+      "id": "conquer-005-rest-vs-graphql",
+      "topic": "Frontend/Backend",
+      "question": "Compare REST vs GraphQL in terms of network payload efficiency and caching at the edge/CDN layer.",
+      "candidate_answer": "REST uses standard HTTP resource endpoints and methods, making it simple to cache at edge CDNs and browser caches via standard Cache-Control and ETag headers, but it can suffer from over-fetching or under-fetching. GraphQL allows clients to query exact fields in a single POST request, eliminating over-fetching, but because most requests are POSTs with custom JSON bodies, edge HTTP caching is much harder without specialized gateways or persisted queries.",
+      "mode": "STANDARD",
+      "metadata": {
+        "expected_quality": "High",
+        "key_concepts": [
+          "over-fetching",
+          "HTTP caching",
+          "CDN edge",
+          "persisted queries"
+        ]
+      }
+    }
+  ]
+}

@@ -1,58 +1,123 @@
 # AI Change Gate
 
-**CI for AI behaviour.**
+> **CI for AI behaviour.**
 
-You change a prompt, your tests still pass, and you find out from a user that quality dropped. The AI Change Gate sits in front of that change — replay old vs new, compare quality / cost / latency, return PASS / FAIL / INCONCLUSIVE with a per-case diff.
+**AI Change Gate** is an experimental regression-testing and evaluation-gating framework for AI-powered applications.
 
-Not an observability dashboard. Not an LLM gateway. Not a prompt playground.
+When a developer changes an application prompt, model configuration, or evaluation rubric, conventional unit tests often still pass while conversational or grading quality silently degrades. AI Change Gate sits directly in front of those changes: it replays baseline vs candidate configurations against the same standardized evaluation set, compares behavior and scores, detects regressions, and issues an automated gate verdict:
 
----
-
-## Stack
-
-| Layer | Choice |
-|---|---|
-| Language | Python 3.11+ |
-| Interface | CLI (Phase 1–2) → FastAPI (Phase 3+) |
-| DB | PostgreSQL |
-| LLM access | Provider SDKs + hand-written wrapper. No LangChain. |
-| Cache / queue | Redis (Phase 3+) |
-| Frontend | Next.js + strict TypeScript + Tailwind (Phase 5) |
-| Orchestration | LangGraph — eval generator only, decided Phase 3 |
-| Tool interface | MCP (Phase 6) |
-| Cloud | AWS (Phase 6) |
-
-## Portfolio story
-
-**AI Engineering** — evaluation methodology, statistics, LLMOps, MCP, Postgres depth.
+```text
+Baseline AI behavior
+        ↓
+Same evaluation set
+        ↓
+Candidate AI behavior
+        ↓
+Compare
+        ↓
+PASS / FAIL / INCONCLUSIVE
+```
 
 ---
 
-## Current phase
+## Target Application & Target Feature
 
-**Phase 0 — design, no code.**
+The initial real-world target application for AI Change Gate is **Conquer** (an AI-powered technical interview preparation simulator).
 
-Open items before Phase 1 starts:
-- [ ] Pick the target application — Conceptra / Conquer / KnowledgeHub
-- [ ] Write eval methodology: regression threshold, case count, repetitions, verdict definitions
-- [ ] Confirm schema and API contracts on paper
+Specifically, the first target feature being gated is Conquer's:
+**Per-Question Answer Scorer & Profile Generator** (`POST /api/interview/score`)
 
----
-
-## Docs
-
-| File | What it covers |
-|---|---|
-| `docs/PROJECT_PLAN.md` | MVP scope, phases, schema, API, system design, risks |
-| `docs/DECISIONS.md` | Every architectural decision + rejected alternative |
-| `docs/DEVELOPMENT_RULES.md` | Build split, code conventions, what agent does / doesn't write |
+This feature scores candidate answers on a 0.0–10.0 scale using an LLM grading rubric, applies deterministic checks (length, STAR compliance, code formatting), updates running candidate skill profile deltas, and drives adaptive difficulty transitions. Gating this feature ensures that prompt adjustments or model upgrades do not cause scoring drift, leniency/harshness anomalies, or rubric hallucinations.
 
 ---
 
-## Rules for the coding agent
+## Status: Initial Implementation Spike
 
-- Read `docs/PROJECT_PLAN.md` before implementing any new component
-- Sections marked 🟢 are written by the human — explain and review, do not implement
-- Do not introduce Phase 3+ technology during Phase 1–2 work
-- Cache is exact-match only — never semantic
-- When a suggestion conflicts with `docs/DECISIONS.md`, surface the conflict rather than routing around it
+> **Note on Evaluation Methodology**:
+> This repository represents an **initial implementation spike** establishing the project skeleton, typed domain models, execution runner, and CLI interface.
+>
+> The evaluation methodology, statistical significance testing, and LLM-as-a-Judge protocols are **intentionally provisional**. Final scoring formulas and benchmark datasets will be revised following our literature review on judge bias, calibration, and LLM evaluation benchmarks.
+
+---
+
+## Project Structure
+
+```text
+ai-change-gate/
+├── README.md
+├── pyproject.toml
+├── src/
+│   └── ai_change_gate/
+│       ├── __init__.py
+│       ├── models.py       # Domain models (EvaluationCase, Result, Run, Verdict)
+│       ├── runner.py       # Execution runner & MockEvaluator abstraction
+│       ├── comparator.py   # Provisional comparison & gating logic
+│       └── cli.py          # Command-line interface
+├── evals/
+│   └── conquer/
+│       └── cases.json      # 5 placeholder development cases (not final benchmark)
+├── tests/
+│   ├── test_models.py      # Domain model unit tests
+│   ├── test_comparator.py  # Gate comparison rule tests (PASS, FAIL, INCONCLUSIVE)
+│   └── test_runner.py      # Runner & mock evaluator tests
+└── docs/
+    ├── NOTES.md            # Research agenda, current status, and roadmap
+    ├── DECISIONS.md        # Architectural decision records
+    ├── PROJECT_PLAN-2.md   # Overall master plan
+    └── DEVELOPMENT_RULES-2.md # Development guidelines
+```
+
+---
+
+## Quickstart
+
+### 1. Installation
+
+Requires Python 3.11+. Install in editable mode:
+
+```bash
+pip install -e .
+```
+
+To install test dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+### 2. Run Tests
+
+Execute the unit test suite using `pytest`:
+
+```bash
+pytest
+```
+
+### 3. Run the CLI
+
+Run the CLI gate on the default Conquer development evaluation cases:
+
+```bash
+# Default demonstration (PASS)
+ai-change-gate
+
+# Or using Python module execution:
+python3 -m ai_change_gate.cli
+
+# Simulate a critical regression detection (FAIL):
+ai-change-gate --demo fail
+
+# Simulate a negligible difference (INCONCLUSIVE):
+ai-change-gate --demo inconclusive
+```
+
+---
+
+## Next Steps
+
+Before implementing the production LLM evaluators and database persistence, we will conduct a literature review covering:
+- **LLM-as-a-Judge** (Zheng et al., 2023)
+- **G-Eval & Rubric-based Scoring** (Liu et al., 2023)
+- **Mitigating Judge Biases** (position bias, verbosity bias, self-enhancement)
+- **Bootstrap Confidence Intervals & Paired Difference Tests**
+- **Benchmark Design for Software Engineering Q&A**
