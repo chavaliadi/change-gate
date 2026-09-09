@@ -108,3 +108,136 @@ class ComparisonResult:
     regressions: List[Dict[str, Any]] = field(default_factory=list)
     improvements: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+# ============================================================================
+# Pairwise Evaluation Domain Models
+# ============================================================================
+
+
+@dataclass
+class Criterion:
+    """Represents an individual evaluation criterion within a rubric.
+
+    Attributes:
+        name: Name or title of the criterion.
+        description: Detailed guidance on what this criterion evaluates.
+        weight: Numeric weight of the criterion, defaults to 1.0.
+    """
+    name: str
+    description: str
+    weight: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.weight < 0.0:
+            raise ValueError("Criterion weight must be non negative.")
+
+
+@dataclass
+class Rubric:
+    """Represents a structured evaluation rubric composed of multiple criteria.
+
+    Attributes:
+        name: Name of the rubric.
+        criteria: List of Criterion objects.
+    """
+    name: str
+    criteria: List[Criterion] = field(default_factory=list)
+
+
+class PairwiseWinner(str, Enum):
+    """Raw outcome from a pairwise comparison judge referring strictly to presented positions."""
+    A = "A"
+    B = "B"
+    TIE = "TIE"
+
+
+RawPositionWinner = PairwiseWinner
+
+
+@dataclass
+class PairwiseJudgment:
+    """Represents a raw judgment returned by a judge comparing two presented positions.
+
+    Attributes:
+        winner: Raw position winner (A, B, or TIE).
+        reason: Qualitative rationale explaining the decision.
+        confidence: Optional confidence score between 0.0 and 1.0.
+        metadata: Optional auxiliary details from the judge.
+    """
+    winner: PairwiseWinner
+    reason: str
+    confidence: Optional[float] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+class NormalizedWinner(str, Enum):
+    """Underlying candidate versus baseline comparison identity after position normalization."""
+    BASELINE = "BASELINE"
+    CANDIDATE = "CANDIDATE"
+    TIE = "TIE"
+
+
+ComparisonIdentity = NormalizedWinner
+
+
+@dataclass
+class BidirectionalEvaluationResult:
+    """Represents the results of evaluating a Baseline versus Candidate pair across both presentation orders.
+
+    Pass 1 (forward): A is Baseline, B is Candidate
+    Pass 2 (reverse): A is Candidate, B is Baseline
+
+    Attributes:
+        pass1_judgment: Raw judgment from pass 1.
+        pass2_judgment: Raw judgment from pass 2.
+        pass1_normalized_winner: Normalized comparison identity for pass 1.
+        pass2_normalized_winner: Normalized comparison identity for pass 2.
+        metadata: Optional dictionary for execution metadata.
+    """
+    pass1_judgment: PairwiseJudgment
+    pass2_judgment: PairwiseJudgment
+    pass1_normalized_winner: NormalizedWinner
+    pass2_normalized_winner: NormalizedWinner
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def pass1_raw_judgment(self) -> PairwiseJudgment:
+        return self.pass1_judgment
+
+    @property
+    def pass2_raw_judgment(self) -> PairwiseJudgment:
+        return self.pass2_judgment
+
+
+BidirectionalResult = BidirectionalEvaluationResult
+
+
+class ConsistencyOutcome(str, Enum):
+    """Possible outcomes when analyzing consistency across bidirectional evaluation passes."""
+    CONSISTENT_CANDIDATE_WIN = "CONSISTENT_CANDIDATE_WIN"
+    CONSISTENT_BASELINE_WIN = "CONSISTENT_BASELINE_WIN"
+    CONSISTENT_TIE = "CONSISTENT_TIE"
+    POSITION_UNSTABLE = "POSITION_UNSTABLE"
+
+
+ConsistencyClassification = ConsistencyOutcome
+
+
+def classify_consistency(
+    pass1_winner: NormalizedWinner,
+    pass2_winner: NormalizedWinner,
+) -> ConsistencyOutcome:
+    """Classify consistency between two normalized bidirectional evaluation passes.
+
+    If both passes agree on the normalized winner, the outcome is consistent.
+    If the passes conflict, the outcome is classified as POSITION_UNSTABLE.
+    """
+    if pass1_winner == pass2_winner:
+        if pass1_winner == NormalizedWinner.CANDIDATE:
+            return ConsistencyOutcome.CONSISTENT_CANDIDATE_WIN
+        if pass1_winner == NormalizedWinner.BASELINE:
+            return ConsistencyOutcome.CONSISTENT_BASELINE_WIN
+        return ConsistencyOutcome.CONSISTENT_TIE
+    return ConsistencyOutcome.POSITION_UNSTABLE
+
