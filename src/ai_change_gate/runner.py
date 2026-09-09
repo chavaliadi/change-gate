@@ -4,6 +4,8 @@ from typing import Any, Callable, Dict, Optional, Protocol, Sequence
 import uuid
 
 from ai_change_gate.models import EvaluationCase, EvaluationResult, EvaluationRun
+from ai_change_gate.pairwise_runner import BidirectionalPairwiseRunner
+
 
 
 class Evaluator(Protocol):

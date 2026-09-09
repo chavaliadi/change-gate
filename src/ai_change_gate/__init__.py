@@ -22,6 +22,7 @@ from ai_change_gate.models import (
 from ai_change_gate.runner import EvaluationRunner, Evaluator, MockEvaluator
 from ai_change_gate.comparator import Comparator, SimpleComparator
 from ai_change_gate.judge import MockPairwiseJudge, PairwiseJudge, PairwiseJudgeCall
+from ai_change_gate.pairwise_runner import BidirectionalPairwiseRunner
 
 __all__ = [
     "BidirectionalEvaluationResult",
@@ -49,5 +50,7 @@ __all__ = [
     "PairwiseJudge",
     "MockPairwiseJudge",
     "PairwiseJudgeCall",
+    "BidirectionalPairwiseRunner",
 ]
+
 
