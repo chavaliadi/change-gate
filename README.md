@@ -1,123 +1,540 @@
 # AI Change Gate
 
-> **CI for AI behaviour.**
+> **CI for AI Behaviour.**
 
-**AI Change Gate** is an experimental regression-testing and evaluation-gating framework for AI-powered applications.
+**AI Change Gate** is an experimental regression-testing and release-gating framework designed specifically for AI-powered applications.
 
-When a developer changes an application prompt, model configuration, or evaluation rubric, conventional unit tests often still pass while conversational or grading quality silently degrades. AI Change Gate sits directly in front of those changes: it replays baseline vs candidate configurations against the same standardized evaluation set, compares behavior and scores, detects regressions, and issues an automated gate verdict:
+In traditional software, when you change code, a suite of unit and integration tests verifies that nothing broke. But in applications powered by Large Language Models (LLMs), a developer might change:
+
+* A system prompt or formatting instruction
+* The underlying model or model version
+* Temperature, top-p, or sampling parameters
+* An evaluation or scoring rubric
+
+When these changes occur, **conventional software tests almost always still pass**. The API returns HTTP 200, the JSON payload matches the expected schema, and no exceptions are raised. Yet the actual quality of the AI's responses may have silently degraded.
+
+AI Change Gate explores how to catch these behavioural regressions before new prompts and configurations are released into production.
 
 ```text
-Baseline AI behavior
-        ↓
-Same evaluation set
-        ↓
-Candidate AI behavior
-        ↓
-Compare
-        ↓
-PASS / FAIL / INCONCLUSIVE
+                  Developer modifies prompt or model
+                                  │
+                                  ▼
+                     ┌──────────────────────────┐
+                     │      AI Change Gate      │
+                     └────────────┬─────────────┘
+                                  │
+                  Replay standardized evaluation set
+                                  │
+                    ┌─────────────┴─────────────┐
+                    ▼                           ▼
+            Baseline Variant            Candidate Variant
+            (current prompt)            (proposed prompt)
+                    │                           │
+                    └─────────────┬─────────────┘
+                                  ▼
+                    Bidirectional Pairwise Evaluation
+                    (swapped orders to expose bias)
+                                  │
+                                  ▼
+                      Order Normalization & Analysis
+                      (detect bias & check consistency)
+                                  │
+                                  ▼
+                             Release Gate
+                      PASS / FAIL / INCONCLUSIVE
 ```
 
 ---
 
-## Target Application & Target Feature
+## The Problem: Silent AI Regressions
 
-The initial real-world target application for AI Change Gate is **Conquer** (an AI-powered technical interview preparation simulator).
+To understand why AI Change Gate is needed, consider how regression testing works in standard software versus AI applications:
 
-Specifically, the first target feature being gated is Conquer's:
-**Per-Question Answer Scorer & Profile Generator** (`POST /api/interview/score`)
+### Traditional Software Regression
 
-This feature scores candidate answers on a 0.0–10.0 scale using an LLM grading rubric, applies deterministic checks (length, STAR compliance, code formatting), updates running candidate skill profile deltas, and drives adaptive difficulty transitions. Gating this feature ensures that prompt adjustments or model upgrades do not cause scoring drift, leniency/harshness anomalies, or rubric hallucinations.
+```text
+Code Change ──▶ Run Test Suite ──▶ Deterministic Assertion ──▶ PASS or FAIL
+```
+
+If a function that calculates payment totals returns an incorrect value, a unit test catches it immediately with a clear assertion failure.
+
+### AI Behaviour Regression
+
+```text
+Prompt Edit ──▶ Run Test Suite ──▶ API Returns 200 OK ──▶ Tests Pass ✅
+                                                          AI Quality Quietly Regressed ❌
+```
+
+Suppose you are building an automated technical interview grader.
+
+* **Before prompt change (Baseline):** A candidate explains horizontal scaling well. The AI grader awards **8.5 / 10** with actionable technical feedback.
+* **After prompt change (Candidate):** The prompt is edited to make responses "more concise." The candidate submits the exact same answer. The AI grader now awards **6.0 / 10**, missing key technical points because the new instructions inadvertently penalised detailed explanations.
+
+No runtime error was thrown. The database update succeeded. All existing unit tests passed. Yet the product became significantly worse for candidates.
+
+AI Change Gate provides the automated gating layer to detect, measure, and flag these regressions before deployment.
 
 ---
 
-## Status: Initial Implementation Spike
+## Current Target Application: Conquer
 
-> **Note on Evaluation Methodology**:
-> This repository represents an **initial implementation spike** establishing the project skeleton, typed domain models, execution runner, and CLI interface.
->
-> The evaluation methodology, statistical significance testing, and LLM-as-a-Judge protocols are **intentionally provisional**. Final scoring formulas and benchmark datasets will be revised following our literature review on judge bias, calibration, and LLM evaluation benchmarks.
+The initial real-world evaluation target for AI Change Gate is **Conquer**, an AI-powered technical interview preparation simulator.
+
+Specifically, the system targets Conquer's core evaluation endpoint:
+`POST /api/interview/score` (Per-Question Answer Scorer & Profile Generator).
+
+In Conquer, this feature:
+1. Evaluates candidate answers across technical tracks (System Design, Algorithms, Distributed Systems).
+2. Generates qualitative feedback and numeric scores on a 0.0–10.0 scale.
+3. Emits skill profile deltas that adjust adaptive question difficulty.
+
+Gating this feature ensures that whenever Conquer's engineering team adjusts scoring prompts or upgrades models, grading standards remain consistent, fair, and calibrated.
+
+> **Extensibility Note:** While Conquer serves as our first real-world domain, the AI Change Gate architecture is domain-agnostic and designed to gate any prompt- or model-driven AI feature.
 
 ---
 
-## Project Structure
+## Core Concept: Why Pairwise Evaluation?
+
+Most early AI evaluation systems rely on **pointwise evaluation**: an LLM judge is shown a single response and asked:
+
+> *"Rate this response on a scale of 1 to 10."*
+
+Research and practical experience show that pointwise scoring suffers from significant weaknesses:
+* **Score Drift:** An LLM might give an 8/10 today and a 6/10 tomorrow for the same response due to subtle temperature or context shifts.
+* **Calibration Complexity:** Aligning what an "8" means across different questions, topics, and models requires extensive manual calibration.
+* **Scale Compression:** Judges tend to cluster scores in narrow ranges (such as 7–8), making small regressions hard to detect.
+
+Instead of asking for an absolute number, **pairwise evaluation** presents two competing outputs simultaneously and asks:
+
+> *"Comparing Output A and Output B for this question, which one is better according to the rubric?"*
+
+Comparing two outputs directly forces a relative decision:
+* Output A is better
+* Output B is better
+* Both are equivalent (Tie)
+
+---
+
+## The Major Innovation: Bidirectional Evaluation & Position Bias
+
+While pairwise comparison is powerful, LLM judges suffer from a well-documented flaw known as **position bias**: **evaluators frequently favor whichever output is presented first (Position A), regardless of substance.**
+
+If you only compare Baseline vs. Candidate once, a judge with position bias will always declare Position A the winner. If Baseline was placed in Position A, you might falsely conclude that Candidate regressed.
+
+AI Change Gate solves this by evaluating every pair **twice** with presentation positions swapped:
+
+```text
+                ┌──────────────────────────────────────────────┐
+                │             Evaluation Case Input            │
+                │        Baseline Output & Candidate Output     │
+                └──────────────────────┬───────────────────────┘
+                                       │
+                    ┌──────────────────┴──────────────────┐
+                    ▼                                     ▼
+             [ Pass 1: Forward ]                  [ Pass 2: Reverse ]
+             Position A = Baseline                Position A = Candidate
+             Position B = Candidate               Position B = Baseline
+                    │                                     │
+                    ▼                                     ▼
+           Raw Judge Decision                    Raw Judge Decision
+              (A / B / TIE)                         (A / B / TIE)
+                    │                                     │
+                    ▼                                     ▼
+           Order Normalization                   Order Normalization
+         (BASELINE/CANDIDATE/TIE)              (BASELINE/CANDIDATE/TIE)
+                    │                                     │
+                    └──────────────────┬──────────────────┘
+                                       ▼
+                         Consistency Classification
+                      (Check if both passes agree)
+```
+
+### Why Normalization Is Required
+
+The raw judge only sees positions (`A` or `B`). It has no knowledge of which system is the Baseline or Candidate.
+
+The system normalizes raw positions back to the true system identity:
+
+| Pass | Position A | Position B | If Judge picks A | If Judge picks B | If Judge picks TIE |
+|---|---|---|---|---|---|
+| **Pass 1 (Forward)** | Baseline | Candidate | **BASELINE** wins | **CANDIDATE** wins | **TIE** |
+| **Pass 2 (Reverse)** | Candidate | Baseline | **CANDIDATE** wins | **BASELINE** wins | **TIE** |
+
+### Detecting Position Bias in Action
+
+Consider a biased judge that blindly votes for Position A:
+
+```text
+Pass 1:
+  Position A = Baseline
+  Position B = Candidate
+  Judge Decision: "A wins"  ──▶  Normalized Winner: BASELINE
+
+Pass 2 (Swapped):
+  Position A = Candidate
+  Position B = Baseline
+  Judge Decision: "A wins"  ──▶  Normalized Winner: CANDIDATE
+```
+
+Although the raw judge selected "A" in both passes, the underlying winners **directly contradict each other** (Baseline in Pass 1 vs. Candidate in Pass 2).
+
+AI Change Gate detects this contradiction and flags the result as:
+```text
+POSITION_UNSTABLE
+```
+
+Blindly trusting a single pass would have yielded false confidence. Bidirectional evaluation surfaces the bias immediately.
+
+---
+
+## Consistency Outcome Scenarios
+
+When comparing two passes, the system classifies the outcome into four clear categories:
+
+| Outcome | Pass 1 (A=Base, B=Cand) | Pass 2 (A=Cand, B=Base) | Meaning |
+|---|---|---|---|
+| **`CONSISTENT_CANDIDATE_WIN`** | Judge chooses B (`CANDIDATE`) | Judge chooses A (`CANDIDATE`) | Candidate legitimately outperformed Baseline in both orders. |
+| **`CONSISTENT_BASELINE_WIN`** | Judge chooses A (`BASELINE`) | Judge chooses B (`BASELINE`) | Baseline outperformed Candidate in both orders (regression detected). |
+| **`CONSISTENT_TIE`** | Judge chooses `TIE` | Judge chooses `TIE` | Both outputs are equivalent in quality. |
+| **`POSITION_UNSTABLE`** | Normalized winners disagree (e.g. Judge votes for `A` both times) | The judge was influenced by presentation order. Output is unreliable. |
+
+---
+
+## Current Architecture
+
+The codebase is strictly layered so that domain concepts, judge protocols, runners, and comparators have clear boundaries and zero tight coupling to external providers:
+
+```text
+src/ai_change_gate/
+├── models.py           # Core domain entities & enums
+├── runner.py           # Pointwise evaluator protocol & single-version runner
+├── judge.py            # PairwiseJudge protocol & deterministic MockPairwiseJudge
+├── pairwise_runner.py  # BidirectionalPairwiseRunner (swaps order & normalizes)
+├── comparator.py       # Provisional SimpleComparator & release gate logic
+└── cli.py              # Demonstration command-line interface
+```
+
+### 1. Typed Domain Models (`models.py`)
+
+* **`EvaluationCase`**: A single test scenario containing the question, candidate answer, topic, mode, optional rubric, and metadata.
+* **`Criterion` & `Rubric`**: Structured criteria defining evaluation guidelines and relative weights.
+* **`PairwiseWinner`**: Raw position choices returned by a judge: `A`, `B`, or `TIE`.
+* **`PairwiseJudgment`**: The raw output of a comparison, holding `winner`, qualitative `reason`, and optional `confidence`.
+* **`NormalizedWinner`**: The normalized identity: `BASELINE`, `CANDIDATE`, or `TIE`.
+* **`BidirectionalEvaluationResult`**: Container holding both raw judgments and normalized winners for forward and reverse passes.
+* **`ConsistencyOutcome` & `classify_consistency()`**: Categorises outcomes as `CONSISTENT_CANDIDATE_WIN`, `CONSISTENT_BASELINE_WIN`, `CONSISTENT_TIE`, or `POSITION_UNSTABLE`.
+* **`Verdict` & `ComparisonResult`**: Gate outcomes (`PASS`, `FAIL`, `INCONCLUSIVE`) used by release comparators.
+
+### 2. Pointwise Evaluation Layer (`runner.py`)
+
+* **`Evaluator`**: A protocol defining `evaluate(case: EvaluationCase) -> EvaluationResult`.
+* **`MockEvaluator`**: A deterministic test double allowing custom scores and per-case overrides.
+* **`EvaluationRunner`**: Executes a collection of cases against an evaluator for a single version.
+
+### 3. Pairwise Judge Abstraction (`judge.py`)
+
+* **`PairwiseJudge`**: A runtime-checkable `Protocol` with the signature:
+  ```python
+  def judge(
+      case: EvaluationCase,
+      output_a: str,
+      output_b: str,
+      rubric: Optional[Rubric] = None,
+  ) -> PairwiseJudgment: ...
+  ```
+* **`MockPairwiseJudge`**: A fully deterministic mock judge designed for comprehensive testing without external network or LLM dependencies. It supports:
+  * Default fallback judgments
+  * FIFO queues of predetermined judgments (to simulate multi-pass sequences)
+  * Per-case overrides
+  * Call recording via `PairwiseJudgeCall` to inspect what the judge received
+* **Isolation Guarantee:** The judge sees only `output_a` and `output_b`. It remains completely unaware of which output belongs to Baseline or Candidate.
+
+### 4. Bidirectional Pairwise Runner (`pairwise_runner.py`)
+
+* **`BidirectionalPairwiseRunner`**: Orchestrates the dual-pass evaluation:
+  1. Presents `output_a = baseline_output`, `output_b = candidate_output` (Pass 1).
+  2. Presents `output_a = candidate_output`, `output_b = baseline_output` (Pass 2).
+  3. Maps raw A/B choices to underlying system identities (`_normalize_pass1` and `_normalize_pass2`).
+  4. Packages both passes into a `BidirectionalEvaluationResult`.
+* **Scope Boundary:** This runner owns execution and normalization. It intentionally does not decide final release gate verdicts.
+
+### 5. Provisional Comparator (`comparator.py`)
+
+* **`SimpleComparator`**: The initial threshold-based comparator implementing basic heuristic rules:
+  * **`PASS`**: Candidate demonstrates net improvement with zero critical regressions.
+  * **`FAIL`**: Triggered by critical score drops or overall degradation.
+  * **`INCONCLUSIVE`**: Differences fall within noise thresholds.
+
+> **Honest Architecture Note:** `SimpleComparator` currently operates on pointwise score runs from the initial prototype spike. It will be superseded in upcoming phases by a statistical pairwise comparator that aggregates bidirectional consistency outcomes.
+
+---
+
+## Current Repository Structure
 
 ```text
 ai-change-gate/
-├── README.md
-├── pyproject.toml
-├── src/
-│   └── ai_change_gate/
-│       ├── __init__.py
-│       ├── models.py       # Domain models (EvaluationCase, Result, Run, Verdict)
-│       ├── runner.py       # Execution runner & MockEvaluator abstraction
-│       ├── comparator.py   # Provisional comparison & gating logic
-│       └── cli.py          # Command-line interface
+├── README.md                          # Project documentation and architecture guide
+├── pyproject.toml                     # Build configuration, metadata, and test dependencies
 ├── evals/
 │   └── conquer/
-│       └── cases.json      # 5 placeholder development cases (not final benchmark)
+│       └── cases.json                 # 5 development test cases for Conquer interview Q&A
+├── src/
+│   └── ai_change_gate/
+│       ├── __init__.py                # Clean public API exports
+│       ├── models.py                  # Domain models, enums, rubrics, and consistency logic
+│       ├── runner.py                  # Pointwise Evaluator protocol, MockEvaluator, EvaluationRunner
+│       ├── judge.py                   # PairwiseJudge protocol, MockPairwiseJudge, call records
+│       ├── pairwise_runner.py         # BidirectionalPairwiseRunner & order normalization
+│       ├── comparator.py              # Provisional SimpleComparator & gating heuristics
+│       └── cli.py                     # Interactive CLI demonstration entry point
 ├── tests/
-│   ├── test_models.py      # Domain model unit tests
-│   ├── test_comparator.py  # Gate comparison rule tests (PASS, FAIL, INCONCLUSIVE)
-│   └── test_runner.py      # Runner & mock evaluator tests
+│   ├── test_models.py                 # Domain models, rubrics, enums & consistency tests (13 tests)
+│   ├── test_comparator.py             # Provisional SimpleComparator tests (5 tests)
+│   ├── test_runner.py                 # Pointwise runner & mock evaluator tests (3 tests)
+│   ├── test_judge.py                  # PairwiseJudge protocol & mock judge tests (11 tests)
+│   └── test_pairwise_runner.py        # Bidirectional runner, normalization & bias tests (10 tests)
 └── docs/
-    ├── NOTES.md            # Research agenda, current status, and roadmap
-    ├── DECISIONS.md        # Architectural decision records
-    ├── PROJECT_PLAN-2.md   # Overall master plan
-    └── DEVELOPMENT_RULES-2.md # Development guidelines
+    ├── NOTES.md                       # Engineering notes, research roadmap & Conquer context
+    ├── DECISIONS.md                   # Architectural decision records (ADRs)
+    ├── PROJECT_PLAN-2.md              # Master engineering & milestone plan
+    └── DEVELOPMENT_RULES-2.md         # Code conventions & phase discipline
 ```
 
 ---
 
-## Quickstart
+## Current Implementation Status
+
+| Component | Status | Notes |
+|---|:---:|---|
+| **Typed Domain Models** | ✅ Implemented | Full support for criteria, rubrics, pairwise judgments, and consistency outcomes. |
+| **Pointwise Evaluator Protocol** | ✅ Implemented | `Evaluator`, `MockEvaluator`, and `EvaluationRunner` in place. |
+| **Pairwise Judge Protocol** | ✅ Implemented | Typed `PairwiseJudge` protocol with `@runtime_checkable` conformance. |
+| **Deterministic Mock Judge** | ✅ Implemented | Supports default judgments, FIFO queues, overrides, and call recording. |
+| **Bidirectional Runner** | ✅ Implemented | Swaps presentation order, normalizes identities, preserves raw and normalized data. |
+| **Position Bias Detection** | ✅ Implemented | Identifies order instability via `ConsistencyOutcome.POSITION_UNSTABLE`. |
+| **Provisional Pointwise CLI** | ✅ Implemented | Demonstrates PASS, FAIL, and INCONCLUSIVE scenarios via CLI flags. |
+| **Unit Test Suite** | ✅ Implemented | **42 passing tests** across 5 test suites. Zero external API calls required. |
+| **Batch Consistency Aggregation** | 🔄 In Progress | Aggregating bidirectional outcomes across full evaluation suites. |
+| **Pairwise Gate Comparator** | 🔄 In Progress | New comparator operating on consistency distributions instead of raw scores. |
+| **Real LLM-backed Judge** | 📌 Planned | Hand-written provider abstraction (Groq, OpenAI, Anthropic). No heavy frameworks. |
+| **Bootstrap Confidence Intervals** | 📌 Planned | 10,000-iteration bootstrap on paired deltas before declaring statistical PASS/FAIL. |
+| **Conquer Golden Benchmark** | 📌 Planned | Expanding beyond 5 placeholder cases to 25–30 stratified interview scenarios. |
+| **GitHub Actions CI/CD Gate** | 📌 Planned | Automated PR commentary and blocking merge gates on detected regressions. |
+
+---
+
+## Quick Start
+
+### Requirements
+
+* **Python 3.11+**
 
 ### 1. Installation
 
-Requires Python 3.11+. Install in editable mode:
+Clone the repository and install in editable mode:
 
 ```bash
+# Clone the repository
+git clone https://github.com/chavaliadi/change-gate.git
+cd change-gate
+
+# Install in editable mode
 pip install -e .
-```
 
-To install test dependencies:
-
-```bash
+# Install development/testing dependencies (pytest)
 pip install -e ".[dev]"
 ```
 
-### 2. Run Tests
+### 2. Run the Test Suite
 
-Execute the unit test suite using `pytest`:
+Execute the entire unit test suite using `pytest`:
 
 ```bash
-pytest
+pytest -v
 ```
 
-### 3. Run the CLI
+All 42 tests run deterministically in under 0.1 seconds without requiring API keys or internet access.
 
-Run the CLI gate on the default Conquer development evaluation cases:
+### 3. Run the CLI Demonstrations
+
+Run the built-in CLI to see how AI Change Gate reports verdicts on sample interview cases:
 
 ```bash
-# Default demonstration (PASS)
+# Default demonstration: Candidate improves over Baseline (PASS)
 ai-change-gate
 
-# Or using Python module execution:
+# Or run directly via Python module:
 python3 -m ai_change_gate.cli
 
-# Simulate a critical regression detection (FAIL):
+# Simulate a critical regression in candidate behavior (FAIL):
 ai-change-gate --demo fail
 
-# Simulate a negligible difference (INCONCLUSIVE):
+# Simulate negligible difference where evidence is balanced (INCONCLUSIVE):
 ai-change-gate --demo inconclusive
+```
+
+Example output from `ai-change-gate --demo fail`:
+
+```text
+AI Change Gate
+==============
+
+Evaluation cases: 5
+
+Baseline:  v1 (avg: 8.00)
+Candidate: v2 (avg: 7.10)
+
+Verdict: FAIL
+
+Summary:
+Critical regression detected in 1 case(s). Candidate average score 7.10 vs baseline 8.00 (diff: -0.90).
+
+Detected Regressions:
+  - [conquer-001-process-vs-thread] baseline=8.0 -> candidate=3.5 (Score dropped past critical regression threshold)
 ```
 
 ---
 
-## Next Steps
+## Code Example: Using the Bidirectional Runner
 
-Before implementing the production LLM evaluators and database persistence, we will conduct a literature review covering:
-- **LLM-as-a-Judge** (Zheng et al., 2023)
-- **G-Eval & Rubric-based Scoring** (Liu et al., 2023)
-- **Mitigating Judge Biases** (position bias, verbosity bias, self-enhancement)
-- **Bootstrap Confidence Intervals & Paired Difference Tests**
-- **Benchmark Design for Software Engineering Q&A**
+Here is how the bidirectional runner is used in Python code with the deterministic mock judge:
+
+```python
+from ai_change_gate.models import (
+    EvaluationCase,
+    PairwiseJudgment,
+    PairwiseWinner,
+    NormalizedWinner,
+    classify_consistency,
+    ConsistencyOutcome,
+)
+from ai_change_gate.judge import MockPairwiseJudge
+from ai_change_gate.pairwise_runner import BidirectionalPairwiseRunner
+
+# 1. Define an evaluation case
+case = EvaluationCase(
+    id="case-101",
+    topic="System Design",
+    question="Explain horizontal vs. vertical scaling.",
+    candidate_answer="Vertical adds RAM/CPU; horizontal adds machines.",
+)
+
+# 2. Configure a mock judge to simulate a consistent candidate win
+# Pass 1 (A=Base, B=Cand): Candidate (B) wins
+# Pass 2 (A=Cand, B=Base): Candidate (A) wins
+mock_judge = MockPairwiseJudge(judgments=[
+    PairwiseJudgment(winner=PairwiseWinner.B, reason="Candidate provided failure modes."),
+    PairwiseJudgment(winner=PairwiseWinner.A, reason="Candidate provided failure modes."),
+])
+
+# 3. Execute bidirectional evaluation
+runner = BidirectionalPairwiseRunner(mock_judge)
+result = runner.evaluate(
+    case=case,
+    baseline_output="Scale vertically by upgrading your server.",
+    candidate_output="Scale horizontally with stateless workers behind a load balancer.",
+)
+
+# 4. Verify normalized outcomes
+assert result.pass1_normalized_winner == NormalizedWinner.CANDIDATE
+assert result.pass2_normalized_winner == NormalizedWinner.CANDIDATE
+
+# 5. Classify consistency
+outcome = classify_consistency(
+    result.pass1_normalized_winner,
+    result.pass2_normalized_winner,
+)
+print(f"Outcome: {outcome.value}")
+# Prints: Outcome: CONSISTENT_CANDIDATE_WIN
+```
+
+---
+
+## Testing & Quality Assurance
+
+AI Change Gate enforces strict test-driven development. The test suite verifies every layer of the architecture:
+
+```text
+tests/
+├── test_models.py           # 13 tests: enums, rubric validation, normalization, and consistency
+├── test_comparator.py       #  5 tests: PASS, FAIL, INCONCLUSIVE rules and score regression detection
+├── test_runner.py           #  3 tests: Pointwise MockEvaluator, overrides, and runner flow
+├── test_judge.py            # 11 tests: PairwiseJudge protocol, MockPairwiseJudge queue & exhaustion
+└── test_pairwise_runner.py  # 10 tests: Order swapping, dual-call verification & position bias detection
+────────────────────────────────────────────────────────────────────────────────
+Total: 42 passed in ~0.04s
+```
+
+Run test coverage inspection anytime:
+
+```bash
+pytest --tb=short
+```
+
+---
+
+## Design Principles
+
+1. **Deterministic Core First:** We build and thoroughly test the execution, normalization, and gating algorithms using deterministic test doubles before connecting expensive, nondeterministic external LLM APIs.
+2. **Strict Separation of Presentation vs. Identity:** The judge only evaluates presented positions (`A` and `B`). The runner manages presentation order and system identities (`Baseline` and `Candidate`). Neither layer leaks into the other.
+3. **Preserve Raw Evidence:** The system never discards raw judge outputs. Both raw position judgments and normalized identities are recorded side-by-side for full auditability.
+4. **Surface Uncertainty, Don't Hide It:** When results conflict due to position bias or high variance, the system emits `POSITION_UNSTABLE` or `INCONCLUSIVE` rather than guessing a binary pass or fail.
+5. **Zero Heavy Framework Bloat:** We avoid heavyweight orchestration frameworks (like LangChain) in core execution paths. Transparent, standard-library Python dataclasses and protocols make attribution and debugging obvious.
+
+---
+
+## Research Motivation & Roadmap
+
+AI Change Gate is an active engineering and research exploration into reliable LLM evaluation methodology. Our roadmap draws directly from foundational literature:
+
+* **LLM-as-a-Judge & Chatbot Arena** (*Zheng et al., 2023*): Validated pairwise comparison as more robust than absolute scoring.
+* **G-Eval & Rubric-based Scoring** (*Liu et al., 2023*): Formulating explicit criteria and probability-weighted evaluations.
+* **Position & Cognitive Bias Mitigation**: Designing algorithmic defenses against presentation order bias, verbosity bias, and model self-enhancement.
+* **Statistical Calibration**: Measuring inter-rater agreement (Cohen’s $\kappa$) against human experts and running bootstrap confidence intervals across paired score differences.
+
+### Project Roadmap
+
+* [x] **Phase 1: Deterministic Foundation (Current)**
+  * Typed domain models and rubric structures
+  * `PairwiseJudge` protocol and deterministic `MockPairwiseJudge`
+  * `BidirectionalPairwiseRunner` with presentation swapping
+  * Order normalization and position instability classification
+  * 42 unit tests with zero third-party dependencies
+* [ ] **Phase 2: Real LLM Judge Integration**
+  * Lightweight provider abstraction (Groq, Anthropic, OpenAI)
+  * Versioned judge prompt artifacts and structured output schemas
+  * Exact-match caching to guarantee zero redundant API spend
+* [ ] **Phase 3: Statistical Gating Engine**
+  * Batch runner aggregating bidirectional outcomes across benchmark suites
+  * Paired difference testing and 10,000-iteration bootstrap confidence intervals
+  * First-class `INCONCLUSIVE` verdict when confidence intervals cross zero
+* [ ] **Phase 4: Conquer Golden Benchmark**
+  * 25–30 stratified test cases spanning System Design, Algorithms, and Architecture
+  * Edge cases: subtle technical errors, verbose superficial answers, code formatting
+* [ ] **Phase 5: CI/CD Release Gate**
+  * GitHub Actions automated evaluation on pull requests modifying prompts
+  * Automated PR summary comments detailing regressions, wins, and consistency rates
+
+---
+
+## Current Limitations
+
+In the interest of engineering transparency, here is what AI Change Gate does **not** yet do in its current stage:
+
+* **No live LLM calls:** The repository currently uses deterministic mock judges and mock evaluators. Live API integrations are scheduled for Phase 2.
+* **Provisional comparator:** The current CLI demo uses `SimpleComparator` (pointwise delta thresholds) while the pairwise statistical comparator is under development.
+* **Development test cases:** The 5 evaluation cases in `evals/conquer/cases.json` are placeholder development inputs, not the final 30-case calibrated benchmark.
+* **Single variable:** The gate currently assumes prompt variations only; model swaps and retrieval parameter variations are out of scope for early phases.
+
+These decisions are deliberate: establishing correct domain abstractions, position normalization, and deterministic test coverage first prevents building on an unstable foundation.
+
+---
+
+## Developer
+
+**Adithya Chavali**
+
+* GitHub: [chavaliadi/change-gate](https://github.com/chavaliadi/change-gate)
+
+*AI Change Gate is an open engineering project exploring how to build reliable, reproducible CI/CD gates for AI application behaviour.*
