@@ -1,7 +1,7 @@
 import pytest
 
-from ai_change_gate.judge import MockPairwiseJudge
-from ai_change_gate.models import (
+from benizakura.judge import MockPairwiseJudge
+from benizakura.models import (
     Criterion,
     EvaluationCase,
     NormalizedWinner,
@@ -11,7 +11,7 @@ from ai_change_gate.models import (
     classify_consistency,
     ConsistencyOutcome,
 )
-from ai_change_gate.pairwise_runner import BidirectionalPairwiseRunner
+from benizakura.pairwise_runner import BidirectionalPairwiseRunner
 
 
 def _create_sample_case(case_id: str = "case-1") -> EvaluationCase:

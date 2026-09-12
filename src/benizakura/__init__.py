@@ -1,6 +1,6 @@
-"""AI Change Gate - Regression-testing and evaluation-gating framework for AI behaviors."""
+"""Benizakura: Regression testing and evaluation gating framework for AI behaviors."""
 
-from ai_change_gate.models import (
+from benizakura.models import (
     BidirectionalEvaluationResult,
     BidirectionalResult,
     ComparisonIdentity,
@@ -19,10 +19,11 @@ from ai_change_gate.models import (
     Verdict,
     classify_consistency,
 )
-from ai_change_gate.runner import EvaluationRunner, Evaluator, MockEvaluator
-from ai_change_gate.comparator import Comparator, SimpleComparator
-from ai_change_gate.judge import MockPairwiseJudge, PairwiseJudge, PairwiseJudgeCall
-from ai_change_gate.pairwise_runner import BidirectionalPairwiseRunner
+from benizakura.runner import EvaluationRunner, Evaluator, MockEvaluator
+from benizakura.comparator import Comparator, SimpleComparator
+from benizakura.judge import MockPairwiseJudge, PairwiseJudge, PairwiseJudgeCall
+from benizakura.pairwise_runner import BidirectionalPairwiseRunner
+
 
 __all__ = [
     "BidirectionalEvaluationResult",

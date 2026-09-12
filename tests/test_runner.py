@@ -1,5 +1,6 @@
-from ai_change_gate.models import EvaluationCase, EvaluationResult
-from ai_change_gate.runner import EvaluationRunner, MockEvaluator
+from benizakura.models import EvaluationCase, EvaluationResult
+from benizakura.runner import EvaluationRunner, MockEvaluator
+
 
 
 def test_mock_evaluator_default():

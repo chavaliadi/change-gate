@@ -1,6 +1,6 @@
 import pytest
 
-from ai_change_gate.models import (
+from benizakura.models import (
     BidirectionalEvaluationResult,
     BidirectionalResult,
     ComparisonIdentity,

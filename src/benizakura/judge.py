@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, runtime_checkable
 
-from ai_change_gate.models import EvaluationCase, PairwiseJudgment, PairwiseWinner, Rubric
+from benizakura.models import EvaluationCase, PairwiseJudgment, PairwiseWinner, Rubric
 
 
 @runtime_checkable

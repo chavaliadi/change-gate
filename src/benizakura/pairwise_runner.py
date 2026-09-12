@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from ai_change_gate.judge import PairwiseJudge
-from ai_change_gate.models import (
+from benizakura.judge import PairwiseJudge
+from benizakura.models import (
     BidirectionalEvaluationResult,
     EvaluationCase,
     NormalizedWinner,

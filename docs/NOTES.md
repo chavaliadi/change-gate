@@ -1,7 +1,7 @@
-# AI Change Gate — Engineering Notes & Research Roadmap
+# Benizakura — Engineering Notes & Research Roadmap
 
 ## Current Goal
-Build the initial skeleton for **AI Change Gate**, establishing a clean, maintainable, and typed foundation for an AI regression-testing and evaluation-gating system ("CI for AI behavior").
+Build the initial skeleton for **Benizakura**, establishing a clean, maintainable, and typed foundation for an AI regression-testing and evaluation-gating system ("CI for AI behavior").
 
 ## Current Target
 - **Application**: **Conquer** (AI-powered technical interview prep platform)
@@ -21,7 +21,7 @@ Prompt and application AI behavior regression testing:
   - Execution runner with abstract `Evaluator` protocol and deterministic `MockEvaluator`.
   - Provisional `SimpleComparator` implementing clear regression detection and improvement gating.
   - 5 placeholder development cases derived from technical interview topics.
-  - Interactive CLI entry point (`ai-change-gate` / `python3 -m ai_change_gate.cli`).
+  - Interactive CLI entry point (`benizakura` / `python3 -m benizakura.cli`).
   - Unit test suite running via `pytest` (14 passing tests).
 - **Evaluation Methodology**: **Not finalized yet**. Intentionally placeholder to avoid premature architectural lock-in.
 

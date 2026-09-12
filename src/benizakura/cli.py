@@ -6,9 +6,9 @@ from pathlib import Path
 import sys
 from typing import List
 
-from ai_change_gate.comparator import SimpleComparator
-from ai_change_gate.models import EvaluationCase
-from ai_change_gate.runner import EvaluationRunner, MockEvaluator
+from benizakura.comparator import SimpleComparator
+from benizakura.models import EvaluationCase
+from benizakura.runner import EvaluationRunner, MockEvaluator
 
 
 def load_cases(path: Path) -> List[EvaluationCase]:
@@ -34,8 +34,8 @@ def load_cases(path: Path) -> List[EvaluationCase]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="ai-change-gate",
-        description="AI Change Gate: Regression-testing change gate for AI behavior.",
+        prog="benizakura",
+        description="Benizakura: Regression testing change gate for AI behavior.",
     )
     parser.add_argument(
         "--cases",
@@ -99,8 +99,8 @@ def main(argv: list[str] | None = None) -> int:
     comparator = SimpleComparator()
     comparison = comparator.compare(baseline_run, candidate_run)
 
-    print("AI Change Gate")
-    print("==============")
+    print("Benizakura")
+    print("==========")
     print()
     print(f"Evaluation cases: {len(cases)}")
     print()

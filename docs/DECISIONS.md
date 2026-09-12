@@ -1,4 +1,4 @@
-# Decisions — AI Change Gate
+# Decisions — Benizakura
 
 Every architectural decision, with the rejected alternative. These are settled unless marked `open`.
 When a new decision is made, append it here using the template at the bottom. Never delete — mark superseded.

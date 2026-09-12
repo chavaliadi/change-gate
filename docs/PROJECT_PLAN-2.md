@@ -1,4 +1,4 @@
-# Project Plan — AI Change Gate
+# Project Plan — Benizakura
 
 Full specification. Read the relevant section before implementing a new component.
 Update this file at the end of each phase — tick off milestones, add learnings.

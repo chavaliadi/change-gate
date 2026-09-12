@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ai_change_gate.models import ComparisonResult, EvaluationRun, Verdict
+from benizakura.models import ComparisonResult, EvaluationRun, Verdict
 
 
 # PROVISIONAL:

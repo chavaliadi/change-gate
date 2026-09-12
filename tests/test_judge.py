@@ -1,7 +1,7 @@
 import pytest
 
-from ai_change_gate.judge import MockPairwiseJudge, PairwiseJudge, PairwiseJudgeCall
-from ai_change_gate.models import (
+from benizakura.judge import MockPairwiseJudge, PairwiseJudge, PairwiseJudgeCall
+from benizakura.models import (
     Criterion,
     EvaluationCase,
     PairwiseJudgment,

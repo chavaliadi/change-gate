@@ -1,5 +1,6 @@
-from ai_change_gate.comparator import SimpleComparator
-from ai_change_gate.models import EvaluationResult, EvaluationRun, Verdict
+from benizakura.comparator import SimpleComparator
+from benizakura.models import EvaluationResult, EvaluationRun, Verdict
+
 
 
 def test_comparator_pass_clear_improvement():

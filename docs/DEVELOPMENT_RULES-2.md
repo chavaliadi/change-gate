@@ -1,4 +1,4 @@
-# Development Rules — AI Change Gate
+# Development Rules — Benizakura
 
 How code gets written in this project. The agent reads this on every prompt.
 

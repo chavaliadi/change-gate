@@ -1,8 +1,8 @@
-# AI Change Gate
+# Benizakura
 
-> **CI for AI Behaviour.**
+> **Detecting silent regressions in AI behaviour.**
 
-**AI Change Gate** is an experimental regression-testing and release-gating framework designed specifically for AI-powered applications.
+**Benizakura** is an experimental regression-testing and release-gating framework designed specifically for AI-powered applications.
 
 In traditional software, when you change code, a suite of unit and integration tests verifies that nothing broke. But in applications powered by Large Language Models (LLMs), a developer might change:
 
@@ -13,14 +13,14 @@ In traditional software, when you change code, a suite of unit and integration t
 
 When these changes occur, **conventional software tests almost always still pass**. The API returns HTTP 200, the JSON payload matches the expected schema, and no exceptions are raised. Yet the actual quality of the AI's responses may have silently degraded.
 
-AI Change Gate explores how to catch these behavioural regressions before new prompts and configurations are released into production.
+Benizakura explores how to catch these behavioural regressions before new prompts and configurations are released into production.
 
 ```text
                   Developer modifies prompt or model
                                   │
                                   ▼
                      ┌──────────────────────────┐
-                     │      AI Change Gate      │
+                     │        Benizakura        │
                      └────────────┬─────────────┘
                                   │
                   Replay standardized evaluation set
@@ -48,7 +48,7 @@ AI Change Gate explores how to catch these behavioural regressions before new pr
 
 ## The Problem: Silent AI Regressions
 
-To understand why AI Change Gate is needed, consider how regression testing works in standard software versus AI applications:
+To understand why Benizakura is needed, consider how regression testing works in standard software versus AI applications:
 
 ### Traditional Software Regression
 
@@ -72,13 +72,13 @@ Suppose you are building an automated technical interview grader.
 
 No runtime error was thrown. The database update succeeded. All existing unit tests passed. Yet the product became significantly worse for candidates.
 
-AI Change Gate provides the automated gating layer to detect, measure, and flag these regressions before deployment.
+Benizakura provides the automated gating layer to detect, measure, and flag these regressions before deployment.
 
 ---
 
 ## Current Target Application: Conquer
 
-The initial real-world evaluation target for AI Change Gate is **Conquer**, an AI-powered technical interview preparation simulator.
+The initial real-world evaluation target for Benizakura is **Conquer**, an AI-powered technical interview preparation simulator.
 
 Specifically, the system targets Conquer's core evaluation endpoint:
 `POST /api/interview/score` (Per-Question Answer Scorer & Profile Generator).
@@ -90,7 +90,7 @@ In Conquer, this feature:
 
 Gating this feature ensures that whenever Conquer's engineering team adjusts scoring prompts or upgrades models, grading standards remain consistent, fair, and calibrated.
 
-> **Extensibility Note:** While Conquer serves as our first real-world domain, the AI Change Gate architecture is domain-agnostic and designed to gate any prompt- or model-driven AI feature.
+> **Extensibility Note:** While Conquer serves as our first real-world domain, the Benizakura architecture is domain-agnostic and designed to gate any prompt- or model-driven AI feature.
 
 ---
 
@@ -122,7 +122,7 @@ While pairwise comparison is powerful, LLM judges suffer from a well-documented 
 
 If you only compare Baseline vs. Candidate once, a judge with position bias will always declare Position A the winner. If Baseline was placed in Position A, you might falsely conclude that Candidate regressed.
 
-AI Change Gate solves this by evaluating every pair **twice** with presentation positions swapped:
+Benizakura solves this by evaluating every pair **twice** with presentation positions swapped:
 
 ```text
                 ┌──────────────────────────────────────────────┐
@@ -179,7 +179,7 @@ Pass 2 (Swapped):
 
 Although the raw judge selected "A" in both passes, the underlying winners **directly contradict each other** (Baseline in Pass 1 vs. Candidate in Pass 2).
 
-AI Change Gate detects this contradiction and flags the result as:
+Benizakura detects this contradiction and flags the result as:
 ```text
 POSITION_UNSTABLE
 ```
@@ -206,7 +206,7 @@ When comparing two passes, the system classifies the outcome into four clear cat
 The codebase is strictly layered so that domain concepts, judge protocols, runners, and comparators have clear boundaries and zero tight coupling to external providers:
 
 ```text
-src/ai_change_gate/
+src/benizakura/
 ├── models.py           # Core domain entities & enums
 ├── runner.py           # Pointwise evaluator protocol & single-version runner
 ├── judge.py            # PairwiseJudge protocol & deterministic MockPairwiseJudge
@@ -273,14 +273,14 @@ src/ai_change_gate/
 ## Current Repository Structure
 
 ```text
-ai-change-gate/
+benizakura/
 ├── README.md                          # Project documentation and architecture guide
 ├── pyproject.toml                     # Build configuration, metadata, and test dependencies
 ├── evals/
 │   └── conquer/
 │       └── cases.json                 # 5 development test cases for Conquer interview Q&A
 ├── src/
-│   └── ai_change_gate/
+│   └── benizakura/
 │       ├── __init__.py                # Clean public API exports
 │       ├── models.py                  # Domain models, enums, rubrics, and consistency logic
 │       ├── runner.py                  # Pointwise Evaluator protocol, MockEvaluator, EvaluationRunner
@@ -358,27 +358,27 @@ All 42 tests run deterministically in under 0.1 seconds without requiring API ke
 
 ### 3. Run the CLI Demonstrations
 
-Run the built-in CLI to see how AI Change Gate reports verdicts on sample interview cases:
+Run the built-in CLI to see how Benizakura reports verdicts on sample interview cases:
 
 ```bash
 # Default demonstration: Candidate improves over Baseline (PASS)
-ai-change-gate
+benizakura
 
 # Or run directly via Python module:
-python3 -m ai_change_gate.cli
+python3 -m benizakura.cli
 
 # Simulate a critical regression in candidate behavior (FAIL):
-ai-change-gate --demo fail
+benizakura --demo fail
 
 # Simulate negligible difference where evidence is balanced (INCONCLUSIVE):
-ai-change-gate --demo inconclusive
+benizakura --demo inconclusive
 ```
 
-Example output from `ai-change-gate --demo fail`:
+Example output from `benizakura --demo fail`:
 
 ```text
-AI Change Gate
-==============
+Benizakura
+==========
 
 Evaluation cases: 5
 
@@ -401,7 +401,7 @@ Detected Regressions:
 Here is how the bidirectional runner is used in Python code with the deterministic mock judge:
 
 ```python
-from ai_change_gate.models import (
+from benizakura.models import (
     EvaluationCase,
     PairwiseJudgment,
     PairwiseWinner,
@@ -409,8 +409,8 @@ from ai_change_gate.models import (
     classify_consistency,
     ConsistencyOutcome,
 )
-from ai_change_gate.judge import MockPairwiseJudge
-from ai_change_gate.pairwise_runner import BidirectionalPairwiseRunner
+from benizakura.judge import MockPairwiseJudge
+from benizakura.pairwise_runner import BidirectionalPairwiseRunner
 
 # 1. Define an evaluation case
 case = EvaluationCase(
@@ -453,7 +453,7 @@ print(f"Outcome: {outcome.value}")
 
 ## Testing & Quality Assurance
 
-AI Change Gate enforces strict test-driven development. The test suite verifies every layer of the architecture:
+Benizakura enforces strict test-driven development. The test suite verifies every layer of the architecture:
 
 ```text
 tests/
@@ -486,7 +486,7 @@ pytest --tb=short
 
 ## Research Motivation & Roadmap
 
-AI Change Gate is an active engineering and research exploration into reliable LLM evaluation methodology. Our roadmap draws directly from foundational literature:
+Benizakura is an active engineering and research exploration into reliable LLM evaluation methodology. Our roadmap draws directly from foundational literature:
 
 * **LLM-as-a-Judge & Chatbot Arena** (*Zheng et al., 2023*): Validated pairwise comparison as more robust than absolute scoring.
 * **G-Eval & Rubric-based Scoring** (*Liu et al., 2023*): Formulating explicit criteria and probability-weighted evaluations.
@@ -520,7 +520,7 @@ AI Change Gate is an active engineering and research exploration into reliable L
 
 ## Current Limitations
 
-In the interest of engineering transparency, here is what AI Change Gate does **not** yet do in its current stage:
+In the interest of engineering transparency, here is what Benizakura does **not** yet do in its current stage:
 
 * **No live LLM calls:** The repository currently uses deterministic mock judges and mock evaluators. Live API integrations are scheduled for Phase 2.
 * **Provisional comparator:** The current CLI demo uses `SimpleComparator` (pointwise delta thresholds) while the pairwise statistical comparator is under development.
@@ -531,10 +531,18 @@ These decisions are deliberate: establishing correct domain abstractions, positi
 
 ---
 
+## Why Benizakura?
+
+The name reflects the central problem explored by this project: a system change can appear to make something stronger or better while quietly introducing hidden degradation.
+
+In AI systems, a prompt, model, or configuration change may appear to improve behaviour while silently causing regressions elsewhere. Benizakura is designed to make those regressions visible before release.
+
+---
+
 ## Developer
 
 **Adithya Chavali**
 
 * GitHub: [chavaliadi/change-gate](https://github.com/chavaliadi/change-gate)
 
-*AI Change Gate is an open engineering project exploring how to build reliable, reproducible CI/CD gates for AI application behaviour.*
+*Benizakura is an open engineering project exploring how to build reliable, reproducible CI/CD gates for AI application behaviour.*
